@@ -1,0 +1,107 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Food Delivery API",
+    "version": "3.0.0",
+    "description": "API con autenticazione JWT e Swagger Authorize"
+  },
+  "servers": [
+    { "url": "http://localhost:3000" }
+  ],
+  "components": {
+    "securitySchemes": {
+      "JWT": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "Authorization",
+        "description": "Inserisci 'Bearer <token>'"
+      }
+    },
+    "schemas": {
+      "User": {
+        "type": "object",
+        "properties": {
+          "nome": { "type": "string" },
+          "email": { "type": "string" },
+          "password": { "type": "string" },
+          "ruolo": { "type": "string", "example": "cliente" },
+          "numero_di_telefono": { "type": "string" },
+          "indirizzo": { "type": "string" },
+          "metodo_pagamento": { "type": "string" },
+          "piva": { "type": "string" }
+        }
+      },
+      "Order": {
+        "type": "object",
+        "properties": {
+          "_id": { "type": "string" },
+          "utente": { "type": "string" },
+          "totale": { "type": "number" },
+          "stato": { "type": "string" }
+        }
+      }
+    }
+  },
+  "security": [
+    { "JWT": [] }
+  ],
+  "paths": {
+    "/auth/register": {
+      "post": {
+        "summary": "Registrazione nuovo utente",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { 
+              "schema": { "$ref": "#/components/schemas/User" } 
+            }
+          }
+        },
+        "responses": { 
+          "201": { "description": "Utente creato correttamente" },
+          "400": { "description": "Dati non validi" }
+        }
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "summary": "Login",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { 
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": { "type": "string" },
+                  "password": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Token JWT restituito" } }
+      }
+    },
+    "/users": {
+      "get": {
+        "summary": "Lista utenti (Protetta)",
+        "security": [{ "JWT": [] }],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": { 
+              "application/json": { 
+                "schema": { 
+                  "type": "array", 
+                  "items": { "$ref": "#/components/schemas/User" } 
+                } 
+              } 
+            }
+          },
+          "401": { "description": "Accesso negato" }
+        }
+      }
+    }
+  }
+}
