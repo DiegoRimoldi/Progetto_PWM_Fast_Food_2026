@@ -5,61 +5,43 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>FastFood - Login</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"/>
-
   <style>
     body {
       background-color: #fef9e7;
       font-family: Arial, sans-serif;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 100vh;
-      margin: 0;
     }
-
     .login-container {
-      width: 100%;
       max-width: 400px;
+      margin: 100px auto;
       background: white;
       border-radius: 16px;
       box-shadow: 0 4px 12px rgba(0,0,0,0.1);
       padding: 30px;
-      margin: 20px;
     }
-
+    .form-label {
+      color: #00B5A2; /* codice colore azzurro logo */
+    }
+    .btn-primary {
+      background-color: #f4c430; /*  codice colore giallo logo */
+      border: none;
+      color: black;
+    }
+    .btn-primary:hover {
+      background-color: #e0b12a;
+    }
     .logo {
       display: block;
       margin: 0 auto 20px;
       max-width: 80px;
     }
-
     h2 {
       color: #00B5A2;
       text-align: center;
       margin-bottom: 20px;
-      font-size: 1.8rem;
     }
-
-    .form-label {
-      color: #00B5A2;
-    }
-
-    .btn-primary {
-      background-color: #f4c430;
-      border: none;
-      color: black;
-      padding: 10px;
-      font-weight: 600;
-    }
-
-    .btn-primary:hover {
-      background-color: #e0b12a;
-    }
-
     #loginError {
       display: none;
     }
-
     .register-link {
       display: block;
       text-align: center;
@@ -68,68 +50,28 @@
       font-weight: bold;
       text-decoration: none;
     }
-
     .register-link:hover {
       text-decoration: underline;
     }
-
-    /* 📱 Mobile */
-    @media (max-width: 576px) {
-      .login-container {
-        padding: 20px;
-        border-radius: 12px;
-      }
-
-      h2 {
-        font-size: 1.5rem;
-      }
-
-      .logo {
-        max-width: 60px;
-      }
-    }
-
-    /* 💻 Tablet/Desktop */
-    @media (min-width: 768px) {
-      .login-container {
-        padding: 40px;
-      }
-
-      h2 {
-        font-size: 2rem;
-      }
-    }
   </style>
 </head>
-
 <body>
-
   <div class="login-container">
-    <a href="index.html">
-      <img src="logo.png" alt="FastFood Logo" class="logo" />
-    </a>
-
+    <a href="index.html"><img src="logo.png" alt="FastFood Logo" class="logo" /></a>
     <h2>Login</h2>
-
     <form id="loginForm" novalidate>
       <div class="mb-3">
         <label for="username" class="form-label">Username *</label>
         <input type="text" class="form-control" id="username" required autocomplete="username" />
       </div>
-
       <div class="mb-3">
         <label for="password" class="form-label">Password *</label>
         <input type="password" class="form-control" id="password" required autocomplete="current-password" />
       </div>
-
       <button type="submit" class="btn btn-primary w-100">Accedi</button>
     </form>
-
     <div id="loginError" class="text-danger text-center mt-3"></div>
-
-    <a href="register.html" class="register-link">
-      Non hai un account? Registrati
-    </a>
+    <a href="register.html" class="register-link">Non hai un account? Registrati</a>
   </div>
 
   <script>
@@ -169,7 +111,7 @@
         localStorage.clear();
         localStorage.setItem("token", data.token);
 
-        const payload = JSON.parse(atob(data.token.split('.')[1]));
+        const payload = JSON.parse(atob(data.token.split('.')[1])); //atob, decodifica stringa Base64
         localStorage.setItem("role", payload.role);
         localStorage.setItem("userId", payload.userId);
 
@@ -185,6 +127,5 @@
       }
     });
   </script>
-
 </body>
 </html>
