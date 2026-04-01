@@ -84,7 +84,7 @@
       loginError.style.display = "none";
       loginError.textContent = "";
 
-      const username = document.getElementById("username").value.trim();
+      const email = document.getElementById("username").value.trim();
       const password = document.getElementById("password").value;
 
       if (!username || !password) {
@@ -94,10 +94,10 @@
       }
 
       try {
-        const response = await fetch("http://localhost:3000/users/login", {
+        const response = await fetch("http://localhost:3000/auth/login", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ username, password }),
+          body: JSON.stringify({ email, password }),
         });
 
         const data = await response.json();
@@ -112,8 +112,8 @@
         localStorage.setItem("token", data.token);
 
         const payload = JSON.parse(atob(data.token.split('.')[1])); //atob, decodifica stringa Base64
-        localStorage.setItem("role", payload.role);
-        localStorage.setItem("userId", payload.userId);
+        localStorage.setItem("role", payload.ruolo);
+        localStorage.setItem("userId", payload.id);
 
         if (payload.role === "ristoratore") {
           window.location.href = "ristoratore/home.html";

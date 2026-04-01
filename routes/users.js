@@ -6,60 +6,84 @@ import authenticateUser from "../middlewares/authenticateUser.js";
 
 const usersRouter = express.Router();
 
-// POST /users/register - Registrazione utente (cliente o ristoratore)
+//
+// 🔹 REGISTER
+//
 usersRouter.post("/register", async (req, res) => {
   try {
     const db = req.app.locals.db;
-    const { username, email, password, numero_di_telefono, indirizzo = "", metodo_pagamento = "", piva = "", role } = req.body;
 
+    const {
+      username,
+      email,
+      password,
+      numero_di_telefono,
+      indirizzo = "",
+      metodo_pagamento = "",
+      piva = "",
+      role
+    } = req.body;
+
+    // VALIDAZIONI BASE
     if (!username || !email || !password || !numero_di_telefono) {
-      return res.status(400).json({ error: "username, email, password e numero di telefono sono obbligatori" });
+      return res.status(400).json({
+        error: "username, email, password e numero di telefono sono obbligatori"
+      });
     }
 
-    if(role=="cliente" && (!indirizzo || !metodo_pagamento)){
-      return res.status(400).json({ error: "Indirizzo e metodo di pagamento sono obbligatori" });
+    if (!role || !["cliente", "ristoratore"].includes(role)) {
+      return res.status(400).json({ error: "Ruolo non valido" });
     }
 
-    if(role=="ristoratore" && !piva){
-      return res.status(400).json({ error: "Partita IVA obbligatoria" });
+    if (role === "cliente" && (!indirizzo || !metodo_pagamento)) {
+      return res.status(400).json({
+        error: "Indirizzo e metodo di pagamento sono obbligatori"
+      });
     }
 
+    if (role === "ristoratore" && !piva) {
+      return res.status(400).json({
+        error: "Partita IVA obbligatoria"
+      });
+    }
+
+    // CONTROLLO UTENTE ESISTENTE
     const userExists = await db.collection("users").findOne({
-      $or: [{ username }, { email }],
+      $or: [{ username }, { email }]
     });
 
     if (userExists) {
-      return res.status(409).json({ error: "Username o email già in uso" });
+      return res.status(409).json({
+        error: "Username o email già in uso"
+      });
     }
 
-    // Hash password
+    // HASH PASSWORD
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    let newUser={};
+    let newUser = {
+      username,
+      email,
+      password: hashedPassword,
+      numero_di_telefono,
+      role
+    };
 
-    if(role=="ristoratore"){
-      newUser = {
-        username,
-        email,
-        password: hashedPassword,
-        numero_di_telefono,
-        piva: piva,
-        role
-      };
-    }else{
-      newUser = {
-        username,
-        email,
-        password: hashedPassword,
-        numero_di_telefono,
-        indirizzo,
-        metodo_pagamento,
-        role,
-      };
+    if (role === "cliente") {
+      newUser.indirizzo = indirizzo;
+      newUser.metodo_pagamento = metodo_pagamento;
+    }
+
+    if (role === "ristoratore") {
+      newUser.piva = piva;
     }
 
     const result = await db.collection("users").insertOne(newUser);
-    res.status(201).json({ message: "Utente registrato con successo", userId: result.insertedId });
+
+    res.status(201).json({
+      message: "Utente registrato con successo",
+      userId: result.insertedId
+    });
 
   } catch (err) {
     console.error(err);
@@ -67,170 +91,207 @@ usersRouter.post("/register", async (req, res) => {
   }
 });
 
-// POST /users/login - login
+//
+// 🔹 LOGIN (FIX PRINCIPALE)
+//
 usersRouter.post("/login", async (req, res) => {
   try {
     const db = req.app.locals.db;
-    const { username, password } = req.body;
 
-    if (!username || !password) {
-      return res.status(400).json({ error: "username e password sono obbligatori" });
+    const { username, email, password } = req.body;
+
+    if ((!username && !email) || !password) {
+      return res.status(400).json({
+        error: "username/email e password sono obbligatori"
+      });
     }
 
-    const user = await db.collection("users").findOne({ username });
+    // CERCA PER USERNAME O EMAIL
+    const user = await db.collection("users").findOne({
+      $or: [
+        { username: username || null },
+        { email: email || null }
+      ]
+    });
+
     if (!user) {
       return res.status(401).json({ error: "Credenziali non valide" });
     }
 
+    // CONTROLLO PASSWORD
     const passwordMatch = await bcrypt.compare(password, user.password);
     if (!passwordMatch) {
       return res.status(401).json({ error: "Credenziali non valide" });
     }
 
-    // genera JWT con userId e role, codificato in base alla chiave memorizzata nel file .env
+    // TOKEN JWT
     const token = jwt.sign(
-      { userId: user._id.toString(), role: user.role },
+      {
+        userId: user._id.toString(),
+        role: user.role
+      },
       process.env.JWT_SECRET,
-      { expiresIn: process.env.JWT_EXPIRES_IN }
+      {
+        expiresIn: process.env.JWT_EXPIRES_IN || "1d"
+      }
     );
 
     res.json({ token });
+
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Errore nel login" });
   }
 });
 
-// GET /users/me - Restituisce informazioni relative all'utente autenticato
+//
+// 🔹 GET /ME (FIX IMPORTANTE userId)
+//
 usersRouter.get("/me", authenticateUser, async (req, res) => {
   try {
     const db = req.app.locals.db;
-    const userId = req.user._id;
+
+    const userId = req.user.userId; // FIX
 
     const user = await db.collection("users").findOne(
       { _id: new ObjectId(userId) },
       { projection: { password: 0 } }
     );
 
-    if (!user) return res.status(404).json({ error: "Utente non trovato" });
+    if (!user) {
+      return res.status(404).json({ error: "Utente non trovato" });
+    }
 
     res.json(user);
+
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Errore nel recupero utente" });
   }
 });
 
-// PUT /users/me - Modifica dati profilo utente autenticato (passsword esclusa)
+//
+// 🔹 UPDATE PROFILO
+//
 usersRouter.put("/me", authenticateUser, async (req, res) => {
   try {
     const db = req.app.locals.db;
-    const userId = req.user._id;
+    const userId = req.user.userId;
 
-    // impedisce inserimento nuova mail o username, se non è univoco per il db.
     if (req.body.email || req.body.username) {
       const query = {
         $or: [],
-        _id: { $ne: new ObjectId(userId) },
+        _id: { $ne: new ObjectId(userId) }
       };
+
       if (req.body.email) query.$or.push({ email: req.body.email });
       if (req.body.username) query.$or.push({ username: req.body.username });
 
       if (query.$or.length > 0) {
         const exists = await db.collection("users").findOne(query);
         if (exists) {
-          return res.status(409).json({ error: "Username o email già in uso" });
+          return res.status(409).json({
+            error: "Username o email già in uso"
+          });
         }
       }
     }
+
     const result = await db.collection("users").findOneAndUpdate(
       { _id: new ObjectId(userId) },
       { $set: req.body },
-      { returnDocument: "after", projection: { password: 0 } }
+      {
+        returnDocument: "after",
+        projection: { password: 0 }
+      }
     );
-    console.log(result)
 
-    if (!result) return res.status(404).json({ error: "Utente non trovato" });
+    if (!result.value) {
+      return res.status(404).json({ error: "Utente non trovato" });
+    }
 
     res.json(result.value);
+
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: "Errore nell'aggiornamento utente" });
+    res.status(500).json({ error: "Errore aggiornamento utente" });
   }
 });
 
-// PUT /users/me/password - Modifica password utente autenticato
+//
+// 🔹 CAMBIO PASSWORD
+//
 usersRouter.put("/me/password", authenticateUser, async (req, res) => {
   try {
     const db = req.app.locals.db;
-    const userId = req.user._id;
+    const userId = req.user.userId;
+
     const { oldPassword, newPassword } = req.body;
-    
-    const user = await db.collection("users").findOne({ _id: new ObjectId(userId) });
-    if (!user) return res.status(404).json({ error: "Utente non trovato" });
 
     if (!oldPassword || !newPassword) {
-      return res.status(400).json({ error: "Errore durante l'analisi dei parametri" });
+      return res.status(400).json({
+        error: "Parametri mancanti"
+      });
     }
 
-    const passwordMatch = await bcrypt.compare(oldPassword,user.password);
-    if(!passwordMatch){
-      return res.status(400).json({ error: "La Vecchia password non corrisponde col valore indicato." });
+    const user = await db.collection("users").findOne({
+      _id: new ObjectId(userId)
+    });
 
+    if (!user) {
+      return res.status(404).json({ error: "Utente non trovato" });
     }
 
-    const hashedNewPassword = await bcrypt.hash(newPassword,10);
+    const match = await bcrypt.compare(oldPassword, user.password);
+    if (!match) {
+      return res.status(400).json({
+        error: "Vecchia password errata"
+      });
+    }
+
+    const hashedNewPassword = await bcrypt.hash(newPassword, 10);
+
     await db.collection("users").updateOne(
       { _id: new ObjectId(userId) },
-      { $set: { password: hashedNewPassword} }
+      { $set: { password: hashedNewPassword } }
     );
 
-    res.json({ message: "Password aggiornata con successo" });
+    res.json({ message: "Password aggiornata" });
+
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: "Errore nell'aggiornamento password" });
+    res.status(500).json({ error: "Errore aggiornamento password" });
   }
 });
 
-//DELETE /:id - Elimina utente autenticato:
-//Se l'utente è un cliente, vengono eliminati anche il carrello e tutti gli ordini ancora attivi (quelli già consegnati, rimangono nel DB per statistiche ristorante)
-//Se l'utente è un ristoratore, vengono eliminati anche il suo ristorante, e tutti gli ordini di quel ristorante.
+//
+// 🔹 DELETE UTENTE
+//
 usersRouter.delete("/:id", authenticateUser, async (req, res) => {
-  const db = req.app.locals.db;
-  const userId = req.params.id;
-
-  if (!ObjectId.isValid(userId)) {
-    return res.status(400).json({ error: "ID utente non valido" });
-  }
-
-  if (req.user._id.toString() !== userId.toString()) {
-    return res.status(403).json({ error: "Non puoi eliminare un altro utente" });
-  }
-
   try {
-    if (req.user.role === "cliente") {
-      await db.collection("carts").deleteOne({ user_id: new ObjectId(userId) });
-      await db.collection("orders").deleteMany({
-        cliente_id: new ObjectId(userId),
-        stato: { $ne: "consegnato" }
-      });
-          }
+    const db = req.app.locals.db;
+    const userId = req.params.id;
 
-    if (req.user.role === "ristoratore") {
-      const restaurant = await db.collection("restaurants").findOne({ ristoratore_id: new ObjectId(userId) });
-      if (restaurant) {
-        await db.collection("orders").deleteMany({ ristorante_id: new ObjectId(restaurant._id) });
-        await db.collection("restaurants").deleteOne({ _id: new ObjectId(restaurant._id) });
-      }
+    if (!ObjectId.isValid(userId)) {
+      return res.status(400).json({ error: "ID non valido" });
     }
 
-    await db.collection("users").deleteOne({ _id: new ObjectId(userId) });
+    if (req.user.userId !== userId) {
+      return res.status(403).json({
+        error: "Non autorizzato"
+      });
+    }
 
-    res.json({ message: "Utente eliminato correttamente e dati associati rimossi." });
+    await db.collection("users").deleteOne({
+      _id: new ObjectId(userId)
+    });
+
+    res.json({ message: "Utente eliminato" });
 
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: "Errore durante l'eliminazione dell'utente" });
+    res.status(500).json({ error: "Errore eliminazione" });
   }
 });
+
 export default usersRouter;
