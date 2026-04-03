@@ -79,13 +79,12 @@
     <a href="statistiche.html" class="nav-link">Statistiche</a>
     <a href="../profilo.html" class="nav-link">Profilo</a>
     <a href="../logout.html" class="nav-link">Logout</a>
-
   </div>
   
 
   <div class="main-content" id="intestazione">
     <h2>Modifica Piatto Personalizzato</h2>
-    <select name="listaPiatti" id="listaPiatti" style="display: none;">
+    <select name="listaPiatti" id="listaPiatti" style="display: none;" class="form-select mb-3">
         <option disabled selected>Seleziona un piatto</option>
     </select>
 
@@ -154,7 +153,7 @@
       try {
         let response = await fetch(url, options);
     
-        if (response.status === 401) { // token scaduto o invalido
+        if (response.status === 401) { 
             window.location.href = "../logout.html";
           }
     
@@ -167,10 +166,14 @@
 
     async function caricaRistorante() {
     try {
-        var response = await fetchConControlloToken(apiBase + "/restaurants", {
-            headers: { "Authorization": "Bearer " + token }
-        });
-        var restaurants = await response.json();
+        // 1. Corretta la rotta da /restaurants a /restaurants/search
+        var response = await fetchConControlloToken(apiBase + "/restaurants/search");
+        if (!response) return;
+
+        var data = await response.json();
+        
+        // 2. /restaurants/search restituisce un oggetto { restaurants: [...] }
+        var restaurants = data.restaurants || [];
         mioRistorante = restaurants.find(r => r.ristoratore_id && r.ristoratore_id.toString() === userId);
         
         if (!mioRistorante) {
@@ -180,18 +183,21 @@
         }
 
         var selectElement = document.getElementById("listaPiatti");
-        var formElement = document.getElementById("piattoPersonalizzato");
 
-        var piattiResponse = await fetchConControlloToken(`${apiBase}/meals`, {
-            headers: { "Authorization": "Bearer " + token }
-        });
+        // 3. Rimosso l'header "Authorization" ripetuto manualmente qui perché fetchConControlloToken lo aggiunge da solo
+        var piattiResponse = await fetchConControlloToken(`${apiBase}/meals`);
+        if (!piattiResponse || !piattiResponse.ok) {
+          console.warn("Impossibile caricare i piatti. Assicurati che le rotte per i piatti siano implementate nel backend.");
+          return;
+        }
+
         var tuttiPiatti = await piattiResponse.json();
 
         var piattiPersonalizzati = tuttiPiatti.filter(p => p.ristorante_id === mioRistorante._id);
 
         if (piattiPersonalizzati.length === 0) {
-            var msg = document.createElement("h3")
-            msg.textContent="Non hai ancora inserito piatti personalizzati.";
+            var msg = document.createElement("h3");
+            msg.textContent = "Non hai ancora inserito piatti personalizzati.";
             document.getElementById("intestazione").appendChild(msg);
             return;
         }
@@ -213,9 +219,9 @@ document.getElementById("listaPiatti").addEventListener("change", async function
     var idMeal = e.target.value;
 
     try {
-        var piattoResponse = await fetchConControlloToken(`${apiBase}/meals/${idMeal}`, {
-            headers: { "Authorization": "Bearer " + token }
-        });
+        var piattoResponse = await fetchConControlloToken(`${apiBase}/meals/${idMeal}`);
+        if (!piattoResponse || !piattoResponse.ok) return;
+
         var piatto = await piattoResponse.json();
 
         if (!piatto || !piatto._id) {
@@ -265,8 +271,7 @@ document.getElementById("piattoPersonalizzato").addEventListener("submit", async
         var response = await fetchConControlloToken(`${apiBase}/meals/${idMeal}`, {
             method: "PUT",
             headers: {
-                "Content-Type": "application/json",
-                "Authorization": "Bearer " + token
+                "Content-Type": "application/json"
             },
             body: JSON.stringify(payload)
         });
@@ -283,9 +288,6 @@ document.getElementById("piattoPersonalizzato").addEventListener("submit", async
         alert(err.message);
     }
 });
-
-
-
 
     (async function init() { await caricaRistorante(); })();
   </script>

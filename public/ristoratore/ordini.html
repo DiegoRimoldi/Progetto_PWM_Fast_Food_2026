@@ -50,9 +50,26 @@
       color: #00B5A2;
       margin-bottom: 1.5rem;
     }
+    .order-card {
+      border: 1px solid #dee2e6;
+      border-radius: 0.5rem;
+      padding: 1rem;
+      margin-bottom: 1rem;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
   </style>
 </head>
 <body>
+
+  <script>
+    (function() {
+      var token = localStorage.getItem("token");
+      var role = localStorage.getItem("role");
+      if (!token || role !== "ristoratore") {
+        window.location.href = "../login.html";
+      }
+    })();
+  </script>
 
 <div class="sidebar">
   <div class="sidebar-header">
@@ -67,13 +84,12 @@
   <a href="statistiche.html" class="nav-link">Statistiche</a>
   <a href="../profilo.html" class="nav-link">Profilo</a>
   <a href="../logout.html" class="nav-link">Logout</a>
-
 </div>
 
 <div class="main-content">
   <h2>Ordini Ristoratore</h2>
 
-  <br><hr><br>
+  <hr><br>
 
   <h3>Ordini Attivi</h3>
   <div id="activeOrders"></div>
@@ -86,7 +102,6 @@
 
   <script>
     var apiBase = "http://localhost:3000";
-    var token = localStorage.getItem("token");
 
     async function fetchConControlloToken(url, options = {}) {
       var token = localStorage.getItem("token");
@@ -102,7 +117,7 @@
       try {
         let response = await fetch(url, options);
     
-        if (response.status === 401) { // token scaduto o invalido
+        if (response.status === 401) { 
             window.location.href = "../logout.html";
           }
     
@@ -116,6 +131,7 @@
     async function caricaOrdiniRistoratore() {
     try {
       var response = await fetchConControlloToken(apiBase + "/orders");
+      if (!response || !response.ok) return;
 
       var orders = await response.json();
       var activeOrders = document.getElementById("activeOrders");
@@ -124,30 +140,37 @@
       activeOrders.innerHTML = "";
       historyOrders.innerHTML = "";
 
+      if (orders.length === 0) {
+        activeOrders.innerHTML = "<p>Nessun ordine presente.</p>";
+      }
+
       orders.forEach(order => {
         var orderDiv = document.createElement("div");
         orderDiv.className = "order-card";
+        
+        // Uso un array vuoto come fallback se 'meals' non esiste per evitare crash
+        var mealsHtml = (order.meals || []).map(meal => `<li>${meal.nome} - Quantità: ${meal.quantita}</li>`).join("");
+        
+        // Formatto la data se esiste
+        var dataFormattata = order.data_ordine ? new Date(order.data_ordine).toLocaleString() : "N/D";
+
         orderDiv.innerHTML = `
-          <br>
           <p><strong>Ordine #${order._id}</strong></p>
           <p>Cliente: ${order.cliente_nome || "Sconosciuto"}</p>
-          <p>Totale: €${order.totale.toFixed(2)}</p>
-          <p>Data ordine: ${order.data_ordine}</p>
-          <p>Tempo di attesa: ${order.tempo_attesa} min</p>
-          <p>Metodo di consegna: ${order.metodo_consegna}</p>
+          <p>Totale: €${(order.totale || 0).toFixed(2)}</p>
+          <p>Data ordine: ${dataFormattata}</p>
+          <p>Tempo di attesa: ${order.tempo_attesa || 0} min</p>
+          <p>Metodo di consegna: ${order.metodo_consegna || "N/D"}</p>
           <p><b>Piatti:</b></p>
-          <ul>
-            ${order.meals.map(meal => `<li>${meal.nome} - Quantità: ${meal.quantita}</li>`).join("")}
-          </ul>
-          <p>Stato: <strong>${order.stato}</strong></p>
-          <br>
+          <ul>${mealsHtml || "Nessun piatto specificato"}</ul>
+          <p>Stato: <span class="badge bg-secondary">${order.stato}</span></p>
         `;
 
         if (["ordinato", "in preparazione"].includes(order.stato)) {
           var updateBtn = document.createElement("button");
-          updateBtn.className = "btn btn-warning";
+          updateBtn.className = "btn btn-warning mt-2";
           updateBtn.innerText = "Avanza Stato";
-          updateBtn.onclick = () => cambiaStatoOrdine(order._id, order.stato);
+          updateBtn.onclick = () => cambiaStatoOrdine(order._id);
           orderDiv.appendChild(updateBtn);
         }
 
@@ -163,23 +186,23 @@
     }
   }
 
-  async function cambiaStatoOrdine(orderId, statoAttuale) {
+  async function cambiaStatoOrdine(orderId) {
     try {
+      // Header rimossi perché gestiti in automatico da fetchConControlloToken
       var response = await fetchConControlloToken(`${apiBase}/orders/${orderId}`, {
-        method: "PUT",
-        headers: {
-          "Authorization": "Bearer " + token,
-          "Content-Type": "application/json"
-        }
+        method: "PUT"
       });
 
       if (!response.ok) throw new Error("Errore nella modifica dello stato.");
 
+      // Ricarica la lista dopo l'aggiornamento
       caricaOrdiniRistoratore();
     } catch (err) {
       console.error("Errore:", err);
+      alert("Impossibile aggiornare lo stato dell'ordine.");
     }
   }
+  
     caricaOrdiniRistoratore();
   </script>
 </body>

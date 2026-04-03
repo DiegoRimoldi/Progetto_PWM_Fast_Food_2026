@@ -67,7 +67,7 @@
     })();
   </script>
   
-<div class="sidebar">
+  <div class="sidebar">
     <div class="sidebar-header">
       <img src="../assets/logo.png" alt="FastFood Logo">
     </div>
@@ -82,7 +82,7 @@
     <a href="../logout.html" class="nav-link">Logout</a>
   </div>
   
-    <div class="main-content">
+  <div class="main-content">
     <h2>Crea Ristorante</h2>
     <div class="form-container">
       <form id="restaurantForm">
@@ -110,8 +110,6 @@
   
   <script>
     var apiBase = "http://localhost:3000";
-    var token = localStorage.getItem("token");
-    var userId = localStorage.getItem("userId");
 
     async function fetchConControlloToken(url, options = {}) {
       var token = localStorage.getItem("token");
@@ -127,9 +125,9 @@
       try {
         let response = await fetch(url, options);
     
-        if (response.status === 401) { // token scaduto o invalido
-            window.location.href = "../logout.html";
-          }
+        if (response.status === 401) { 
+          window.location.href = "../logout.html";
+        }
     
         return response;
       } catch (error) {
@@ -156,24 +154,28 @@
         name: name,
         address: address,
         description: description,
-        image: image,
-        ristoratore_id: userId,
+        image: image
       };
 
       try {
+        // Rimosso l'header Authorization da qui perché lo gestisce già la funzione fetchConControlloToken!
         var response = await fetchConControlloToken(apiBase + "/restaurants", {
           method: "POST",
           headers: {
-            "Content-Type": "application/json",
-            "Authorization": "Bearer " + token
+            "Content-Type": "application/json"
           },
           body: JSON.stringify(payload)
         });
+
+        if (!response) return; // Se c'è stato un errore di rete gestito dal wrapper
+
         var data = await response.json();
+
         if (!response.ok) {
           document.getElementById("message").innerHTML = '<div class="alert alert-danger">' + (data.error || "Errore nella creazione del ristorante") + '</div>';
           return;
         }
+
         document.getElementById("message").innerHTML = '<div class="alert alert-success">Ristorante creato con successo!</div>';
         setTimeout(function() {
           window.location.href = "home.html";
