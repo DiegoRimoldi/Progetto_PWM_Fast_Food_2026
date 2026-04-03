@@ -87,7 +87,9 @@
   <a href="statistiche.html" class="nav-link">Statistiche</a>
   <a href="../profilo.html" class="nav-link">Profilo</a>
   <a href="../logout.html" class="nav-link">Logout</a>
+
 </div>
+
 
 <div class="main-content">
   <h2>Dashboard Ristoratore</h2>
@@ -100,42 +102,38 @@
   var userId = localStorage.getItem("userId");
 
   async function fetchConControlloToken(url, options = {}) {
-    var token = localStorage.getItem("token");
-  
-    if (!token) {
-      window.location.href = "../logout.html";
-      return;
-    }
-  
-    options.headers = options.headers || {};
-    options.headers["Authorization"] = "Bearer " + token;
-  
-    try {
-      let response = await fetch(url, options);
-  
-      if (response.status === 401) { 
+      var token = localStorage.getItem("token");
+    
+      if (!token) {
         window.location.href = "../logout.html";
+        return;
       }
-  
-      return response;
-    } catch (error) {
-      console.error("Errore nella richiesta API:", error);
-      return null;
+    
+      options.headers = options.headers || {};
+      options.headers["Authorization"] = "Bearer " + token;
+    
+      try {
+        let response = await fetch(url, options);
+    
+        if (response.status === 401) { // token scaduto o invalido
+            window.location.href = "../logout.html";
+          }
+    
+        return response;
+      } catch (error) {
+        console.error("Errore nella richiesta API:", error);
+        return null;
+      }
     }
-  }
 
   async function caricaDatiRistorante() {
     try {
-      // 1. Corretto l'endpoint da '/restaurants' a '/restaurants/search'
-      var response = await fetchConControlloToken(apiBase + "/restaurants/search");
+      var response = await fetchConControlloToken(apiBase + "/restaurants", {
+        headers: { "Authorization": "Bearer " + token }
+      });
+      var restaurants = await response.json();
       
-      if (!response) return;
-      var data = await response.json();
-      
-      // 2. Essendo la risposta un oggetto { restaurants: [...] }, estraiamo l'array
-      var restaurants = data.restaurants || [];
-      
-      var mioRistorante = restaurants.find(r => r.ristoratore_id === userId || (r.ristoratore_id && r.ristoratore_id.toString() === userId));
+      var mioRistorante = restaurants.find(r => r.ristoratore_id === userId || r.ristoratore_id.toString() === userId);
       var contentArea = document.getElementById("contentArea");
 
       if (!mioRistorante) {
@@ -143,8 +141,7 @@
             '<div class="d-flex flex-column justify-content-center align-items-center" style="min-height:300px;">' +
               '<p class="fs-4 text-muted mb-3">Non hai ancora creato un ristorante</p>' +
               '<a href="creaRistorante.html" class="btn btn-warning">Crea Ristorante</a>' +
-            '</div>';
-        return;
+            '</div>';        return;
       }
 
       contentArea.innerHTML = `
@@ -163,28 +160,22 @@
         </div>
       `;
 
-      caricaOrdini(mioRistorante._id, mioRistorante.name);
+      caricaOrdini(mioRistorante._id);
     } catch (err) {
       console.error("Errore nel caricamento dei dati del ristorante:", err);
     }
   }
 
-  async function caricaOrdini(ristoranteId, ristoranteNome) {
+  async function caricaOrdini(ristoranteId) {
     try {
-      var response = await fetchConControlloToken(apiBase + "/orders");
+      var response = await fetchConControlloToken(apiBase + "/orders", {
+        headers: { "Authorization": "Bearer " + token }
+      });
 
-      if (!response || !response.ok) throw new Error("Errore nel recupero degli ordini.");
+      if (!response.ok) throw new Error("Errore nel recupero degli ordini.");
 
       var orders = await response.json();
-      
-      // 3. Poiché il mock non ha l'ID del ristorante, usiamo il nome del ristorante come fallback di filtraggio
-      var ordiniFiltrati = orders.filter(o => {
-        const appartieneARistorante = o.ristorante_id 
-          ? o.ristorante_id.toString() === restauranteId.toString()
-          : o.ristorante_nome === restauranteNome; // Fallback se manca l'ID nel mock
-          
-        return appartieneARistorante && o.stato !== "consegnato";
-      });
+      var ordiniFiltrati = orders.filter(o => o.ristorante_id.toString() === ristoranteId.toString() && o.stato !== "consegnato");
 
       var ordersContainer = document.getElementById("ordersInProgress");
       ordersContainer.innerHTML = "";
@@ -197,13 +188,12 @@
       ordiniFiltrati.forEach(order => {
         var orderDiv = document.createElement("div");
         orderDiv.className = "mb-3 p-2 border rounded";
-        
-        // 4. Modificati i campi da stampare per rispecchiare quelli realmente presenti nell'array mock
         orderDiv.innerHTML = `
           <p><strong>Ordine #${order._id}</strong></p>
+          <p>Cliente: ${order.cliente_nome}</p>
           <p>Totale: €${order.totale.toFixed(2)}</p>
-          <p>Tempo d'attesa stimato: ${order.tempo_attesa} min</p>
           <p>Stato: <span class="badge bg-warning">${order.stato}</span></p>
+          <p>Consegna: ${order.metodo_consegna}</p>
         `;
         ordersContainer.appendChild(orderDiv);
       });

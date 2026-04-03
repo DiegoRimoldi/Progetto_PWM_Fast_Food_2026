@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>FastFood - Statistiche Ristorante</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
     body {
       margin: 0;
@@ -86,6 +86,7 @@
   <a href="statistiche.html" class="nav-link active">Statistiche</a>
   <a href="../profilo.html" class="nav-link">Profilo</a>
   <a href="../logout.html" class="nav-link">Logout</a>
+
 </div>
 
 <div class="main-content">
@@ -102,176 +103,68 @@
 </div>
 
 <script>
-  const apiBase = "http://localhost:3000";
-  const userId = localStorage.getItem("userId");
-
-  let mioRistorante = null;
+  var apiBase = "http://localhost:3000";
+  var token = localStorage.getItem("token");
 
   async function fetchConControlloToken(url, options = {}) {
-    const token = localStorage.getItem("token");
-    if (!token) {
-      window.location.href = "../logout.html";
-      return null;
-    }
-    options.headers = options.headers || {};
-    options.headers["Authorization"] = "Bearer " + token;
-    try {
-      const response = await fetch(url, options);
-      if (response.status === 401 || response.status === 403) {
+      var token = localStorage.getItem("token");
+    
+      if (!token) {
         window.location.href = "../logout.html";
+        return;
+      }
+    
+      options.headers = options.headers || {};
+      options.headers["Authorization"] = "Bearer " + token;
+    
+      try {
+        let response = await fetch(url, options);
+    
+        if (response.status === 401) { // token scaduto o invalido
+            window.location.href = "../logout.html";
+          }
+    
+        return response;
+      } catch (error) {
+        console.error("Errore nella richiesta API:", error);
         return null;
       }
-      return response;
-    } catch (err) {
-      console.error("Errore nella richiesta API:", err);
-      return null;
-    }
-  }
-
-  // Carica ristoranti e individua quello del ristoratore autenticato
-  async function caricaRistorante() {
-    try {
-      const res = await fetchConControlloToken(apiBase + "/restaurants/search");
-      if (!res || !res.ok) return;
-      const data = await res.json();
-      const restaurants = data.restaurants || [];
-      mioRistorante = restaurants.find(r => {
-        const rid = r.ristoratore_id && (r.ristoratore_id.toString ? r.ristoratore_id.toString() : r.ristoratore_id);
-        return rid === userId || (r._id && (r._id.toString ? r._id.toString() : r._id) === userId);
-      });
-      if (!mioRistorante) {
-        document.getElementById("contentArea").innerHTML = 
-          '<div class="d-flex flex-column justify-content-center align-items-center" style="min-height:300px;">' +
-            '<p class="fs-4 text-muted mb-3">Non hai ancora creato un ristorante</p>' +
-            '<a href="gestioneRistorante.html" class="btn btn-warning">Vai a Gestisci Ristorante</a>' +
-          '</div>';
-      }
-    } catch (err) {
-      console.error("Errore caricaRistorante:", err);
-    }
-  }
-
-  // Calcola statistiche a partire dagli ordini filtrati per ristorante_id
-  function calcolaStatistiche(orders) {
-    const stats = {
-      totalOrders: 0,
-      totalRevenue: 0,
-      ordersByState: {},
-      topMealsMap: {}, // nome -> quantità
-      ordersTrend: {}  // date (YYYY-MM-DD) -> count
-    };
-
-    const now = new Date();
-    const days30Ago = new Date(now);
-    days30Ago.setDate(now.getDate() - 29); // includi oggi e 29 giorni precedenti
-
-    orders.forEach(order => {
-      stats.totalOrders += 1;
-      stats.totalRevenue += Number(order.totale || 0);
-
-      const stato = order.stato || "sconosciuto";
-      stats.ordersByState[stato] = (stats.ordersByState[stato] || 0) + 1;
-
-      // meals: [{ nome, quantita }]
-      if (Array.isArray(order.meals)) {
-        order.meals.forEach(m => {
-          const nome = m.nome || "Sconosciuto";
-          const q = Number(m.quantita || 0);
-          stats.topMealsMap[nome] = (stats.topMealsMap[nome] || 0) + q;
-        });
-      }
-
-      // trend: solo ultimi 30 giorni
-      const d = new Date(order.data_ordine || order.createdAt || Date.now());
-      if (d >= days30Ago) {
-        const key = d.toISOString().slice(0,10); // YYYY-MM-DD
-        stats.ordersTrend[key] = (stats.ordersTrend[key] || 0) + 1;
-      }
-    });
-
-    // Convert topMealsMap to sorted array [ [nome, quantita], ... ]
-    const topMeals = Object.entries(stats.topMealsMap)
-      .sort((a,b) => b[1] - a[1])
-      .slice(0,10);
-
-    // Ensure trend has entries for each of the last 30 days (even zero)
-    const trend = {};
-    for (let i = 0; i < 30; i++) {
-      const d = new Date(days30Ago);
-      d.setDate(days30Ago.getDate() + i);
-      const key = d.toISOString().slice(0,10);
-      trend[key] = stats.ordersTrend[key] || 0;
     }
 
-    return {
-      totalOrders: stats.totalOrders,
-      totalRevenue: stats.totalRevenue,
-      ordersByState: stats.ordersByState,
-      topMeals,
-      ordersTrend: trend
-    };
-  }
-
-  // Carica ordini dal server e mostra statistiche filtrate per mioRistorante._id
   async function caricaStatistiche() {
     try {
-      if (!mioRistorante) {
-        await caricaRistorante();
-        if (!mioRistorante) return;
+      var response = await fetchConControlloToken(apiBase + "/restaurants/statistics");
+      if (!response || !response.ok) return;
+
+      var stats = await response.json();
+
+      if (stats.totalOrders === 0) {
+        contentArea.innerHTML = 
+            '<div class="d-flex flex-column justify-content-center align-items-center" style="min-height:300px;">' +
+              '<p class="fs-4 text-muted mb-3">Non hai ancora completato ordini</p>' +
+              '<a href="ordini.html" class="btn btn-warning">Vai alla pagina ordini</a>' +
+            '</div>';        return;
+      } else {
+        document.getElementById("totalOrders").innerText = stats.totalOrders;
+        document.getElementById("totalRevenue").innerText = stats.totalRevenue?.toFixed(2) ?? "N/A";
+
+        var stateContainer = document.getElementById("ordersByState");
+        stateContainer.innerHTML = Object.entries(stats.ordersByState)
+          .map(([stato, count]) => `<p>${stato}: ${count}</p>`).join("");
+
+        var mealsContainer = document.getElementById("topMeals");
+        mealsContainer.innerHTML = stats.topMeals.map(([nome, quantita]) => `<p>${nome}, Ordinato ${quantita} Volte</p>`).join("");
+
+        var trendContainer = document.getElementById("ordersTrend");
+        trendContainer.innerHTML = Object.entries(stats.ordersTrend)
+          .map(([date, count]) => `<p>${date}: ${count} ordini</p>`).join("");
       }
-
-      const res = await fetchConControlloToken(apiBase + "/orders");
-      if (!res || !res.ok) {
-        console.error("Errore nella risposta /orders:", res && res.status);
-        return;
-      }
-      const orders = await res.json();
-      // Filtra per ristorante_id (attenzione: ristorante_id può essere ObjectId o string)
-      const rid = mioRistorante._id || mioRistorante.id || mioRistorante._id && mioRistorante._id.$oid;
-      const filtered = (orders || []).filter(o => {
-        if (!o.ristorante_id) return false;
-        const oid = o.ristorante_id.toString ? o.ristorante_id.toString() : o.ristorante_id;
-        const mrid = rid.toString ? rid.toString() : rid;
-        return oid === mrid;
-      });
-
-      if (filtered.length === 0) {
-        document.getElementById("contentArea").innerHTML = 
-          '<div class="d-flex flex-column justify-content-center align-items-center" style="min-height:300px;">' +
-            '<p class="fs-4 text-muted mb-3">Non hai ancora completato ordini</p>' +
-            '<a href="ordini.html" class="btn btn-warning">Vai alla pagina ordini</a>' +
-          '</div>';
-        return;
-      }
-
-      const stats = calcolaStatistiche(filtered);
-
-      document.getElementById("totalOrders").innerText = stats.totalOrders;
-      document.getElementById("totalRevenue").innerText = stats.totalRevenue.toFixed(2);
-
-      const stateContainer = document.getElementById("ordersByState");
-      stateContainer.innerHTML = Object.entries(stats.ordersByState)
-        .map(([stato, count]) => `<p class="mb-1">${stato}: ${count}</p>`).join("");
-
-      const mealsContainer = document.getElementById("topMeals");
-      mealsContainer.innerHTML = stats.topMeals.length
-        ? stats.topMeals.map(([nome, quantita]) => `<p class="mb-1">${nome} — ordinato ${quantita} volte</p>`).join("")
-        : "<p class='text-muted'>Nessun piatto ordinato</p>";
-
-      const trendContainer = document.getElementById("ordersTrend");
-      trendContainer.innerHTML = Object.entries(stats.ordersTrend)
-        .map(([date, count]) => `<p class="mb-1">${date}: ${count} ordini</p>`).join("");
-
     } catch (err) {
       console.error("Errore nel caricamento delle statistiche:", err);
     }
   }
 
-  // Inizializzazione
-  (async function init() {
-    await caricaRistorante();
-    await caricaStatistiche();
-  })();
+  caricaStatistiche();
 </script>
 
 </body>

@@ -67,7 +67,7 @@
     })();
   </script>
   
-  <div class="sidebar">
+<div class="sidebar">
     <div class="sidebar-header">
       <img src="../assets/logo.png" alt="FastFood Logo">
     </div>
@@ -80,7 +80,9 @@
     <a href="statistiche.html" class="nav-link">Statistiche</a>
     <a href="../profilo.html" class="nav-link">Profilo</a>
     <a href="../logout.html" class="nav-link">Logout</a>
+
   </div>
+  
   
   <div class="main-content" id="contentArea">
     <h2>Gestisci Ristorante</h2>
@@ -88,6 +90,7 @@
   
   <script>
     var apiBase = "http://localhost:3000";
+    var token = localStorage.getItem("token");
     var userId = localStorage.getItem("userId");
 
     async function fetchConControlloToken(url, options = {}) {
@@ -104,9 +107,9 @@
       try {
         let response = await fetch(url, options);
     
-        if (response.status === 401) { 
-          window.location.href = "../logout.html";
-        }
+        if (response.status === 401) { // token scaduto o invalido
+            window.location.href = "../logout.html";
+          }
     
         return response;
       } catch (error) {
@@ -114,27 +117,19 @@
         return null;
       }
     }
-
     async function caricaDatiRistorante() {
       try {
-        // Chiamiamo l'endpoint per cercare i ristoranti
-        var response = await fetchConControlloToken(apiBase + "/restaurants/search");
-        if (!response) return;
-
-        var data = await response.json();
-        
-        // Estraiamo l'array 'restaurants' dall'oggetto restituito dal backend
-        var restaurants = data.restaurants || [];
-        
+        var response = await fetchConControlloToken(apiBase + "/restaurants", {
+          headers: { "Authorization": "Bearer " + token }
+        });
+        var restaurants = await response.json();
         var mioRistorante = restaurants.find(function(r) {
           return r.ristoratore_id && (r.ristoratore_id === userId || r.ristoratore_id.toString() === userId);
         });
-
         var contentArea = document.getElementById("contentArea");
-
         if (mioRistorante) {
           contentArea.innerHTML += 
-              '<form id="restaurantForm" class="form-container">' +
+              '<form id="restaurantForm">' +
                 '<div class="mb-3">' +
                   '<label for="name" class="form-label">Nome del Ristorante *</label>' +
                   '<input type="text" id="name" class="form-control" value="' + mioRistorante.name + '" required>' +
@@ -153,46 +148,40 @@
                 '</div>' +
                 '<button type="submit" class="btn btn-warning">Aggiorna Ristorante</button>' +
               '</form>' +
-              '<div class="form-container mt-3">' +
+              '<div class="mt-3">' +
                 '<button id="deleteBtn" class="btn btn-danger">Elimina Ristorante</button>' +
               '</div>' +
-              '<div id="message" class="form-container mt-3"></div>';          
-
-          // Event Listener per l'aggiornamento
+              '<div id="message" class="mt-3"></div>';          
           document.getElementById("restaurantForm").addEventListener("submit", async function(e) {
             e.preventDefault();
             var name = document.getElementById("name").value.trim();
             var address = document.getElementById("address").value.trim();
             var description = document.getElementById("description").value.trim();
             var image = document.getElementById("image").value.trim();
-
             if (!name || !address) {
               document.getElementById("message").innerHTML = '<div class="alert alert-danger">Nome e indirizzo sono obbligatori.</div>';
               return;
             }
-
             var payload = {
               name: name,
               address: address,
               description: description,
               image: image,
             };
-
             try {
-              // Rimosso header Authorization duplicato!
               var updateRes = await fetchConControlloToken(apiBase + "/restaurants/" + mioRistorante._id, {
                 method: "PUT",
                 headers: {
-                  "Content-Type": "application/json"
+                  "Content-Type": "application/json",
+                  "Authorization": "Bearer " + token
                 },
                 body: JSON.stringify(payload)
               });
-
               if (!updateRes.ok) {
                 var errorText = await updateRes.text();
                 throw new Error("HTTP " + updateRes.status + " - " + errorText);
               }
-
+              var updateData = await updateRes.json();
               document.getElementById("message").innerHTML = '<div class="alert alert-success">Ristorante aggiornato con successo!</div>';
               
             } catch (err) {
@@ -201,26 +190,20 @@
             }
           });
           
-          // Event Listener per l'eliminazione
           document.getElementById("deleteBtn").addEventListener("click", async function() {
-            if (!confirm("Sei sicuro di voler eliminare questo ristorante?")) return;
-
             try {
-              // Rimosso header Authorization duplicato!
               var delRes = await fetchConControlloToken(apiBase + "/restaurants/" + mioRistorante._id, {
-                method: "DELETE"
+                method: "DELETE",
+                headers: { "Authorization": "Bearer " + token }
               });
-
               if (!delRes.ok) {
                 var delError = await delRes.text();
                 throw new Error("HTTP " + delRes.status + " - " + delError);
               }
-
               document.getElementById("message").innerHTML = '<div class="alert alert-success">Ristorante eliminato con successo!</div>';
               setTimeout(function() {
                 window.location.href = "home.html";
               }, 2000);
-
             } catch (err) {
               console.error("Errore:", err);
               document.getElementById("message").innerHTML = '<div class="alert alert-danger">' + err.message + '</div>';
@@ -228,7 +211,7 @@
           });
           
         } else {
-          contentArea.innerHTML += 
+          contentArea.innerHTML = 
             '<div class="d-flex flex-column justify-content-center align-items-center" style="min-height:300px;">' +
               '<p class="fs-4 text-muted mb-3">Non hai ancora creato un ristorante</p>' +
               '<a href="creaRistorante.html" class="btn btn-warning">Crea Ristorante</a>' +
