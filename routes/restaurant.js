@@ -2,6 +2,7 @@ const express = require("express");
 const { ObjectId } = require("mongodb");
 const authenticateUser = require("../middleware/authenticateUser");
 const authorizeRistoratore = require("../middleware/authorizeRistoratore");
+const { geocodeAddress } = require("../utils/geocoding");
 
 const router = express.Router();
 
@@ -99,10 +100,19 @@ router.post("/", authenticateUser, authorizeRistoratore, async (req, res) => {
   if (!name || !address) return res.status(400).json({ error: "Nome e indirizzo sono obbligatori" });
 
   try {
+    const coordinates = await geocodeAddress(address);
     const existingRestaurant = await db.collection("restaurants").findOne({ ristoratore_id: new ObjectId(req.user._id) });
     if (existingRestaurant) return res.status(400).json({ error: "Hai già un ristorante associato" });
 
-    const newRestaurant = { name, address, description, image, menu, ristoratore_id: new ObjectId(req.user._id) };
+    const newRestaurant = {
+      name,
+      address,
+      description,
+      image,
+      menu,
+      location: { lat: coordinates.lat, lon: coordinates.lon, normalizedAddress: coordinates.displayName },
+      ristoratore_id: new ObjectId(req.user._id)
+    };
     const result = await db.collection("restaurants").insertOne(newRestaurant);
     res.status(201).json({ ...newRestaurant, _id: result.insertedId });
   } catch (err) {
@@ -126,6 +136,15 @@ router.put("/:restaurantId", authenticateUser, authorizeRistoratore, async (req,
     ["name", "address", "menu", "description", "image"].forEach((key) => {
       if (req.body[key] !== undefined) updateDoc[key] = req.body[key];
     });
+
+    if (updateDoc.address) {
+      const coordinates = await geocodeAddress(updateDoc.address);
+      updateDoc.location = {
+        lat: coordinates.lat,
+        lon: coordinates.lon,
+        normalizedAddress: coordinates.displayName
+      };
+    }
 
     await db.collection("restaurants").updateOne({ _id: new ObjectId(restaurantId) }, { $set: updateDoc });
     const updatedRestaurant = await db.collection("restaurants").findOne({ _id: new ObjectId(restaurantId) });

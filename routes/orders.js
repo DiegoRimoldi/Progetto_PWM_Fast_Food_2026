@@ -2,6 +2,7 @@ const express = require("express");
 const { ObjectId } = require("mongodb");
 const authenticateUser = require("../middleware/authenticateUser");
 const authorizeRistoratore = require("../middleware/authorizeRistoratore");
+const { geocodeAddress, distanceInKm } = require("../utils/geocoding");
 
 const ordersRouter = express.Router();
 const validStates = ["ordinato", "in preparazione", "in consegna", "consegnato"];
@@ -17,8 +18,15 @@ ordersRouter.post("/", authenticateUser, async (req, res) => {
 
     if (user.role !== "cliente") return res.status(403).json({ error: "Solo i clienti possono creare ordini" });
 
-    const { meals, metodo_consegna, distanza_km } = req.body;
+    const { meals, metodo_consegna, distanza_km, delivery_address } = req.body;
     if (!Array.isArray(meals) || meals.length === 0) return res.status(400).json({ error: "meals deve essere un array non vuoto" });
+
+    const normalizedDeliveryMethod = (metodo_consegna || "").toLowerCase();
+    const isHomeDelivery = normalizedDeliveryMethod === "consegna a domicilio";
+
+    if (!["consegna a domicilio", "ritiro in ristorante"].includes(normalizedDeliveryMethod)) {
+      return res.status(400).json({ error: "metodo_consegna deve essere 'Ritiro in ristorante' o 'Consegna a domicilio'" });
+    }
 
     const ordiniPerRistoranti = {};
     for (const m of meals) {
@@ -27,12 +35,16 @@ ordersRouter.post("/", authenticateUser, async (req, res) => {
       }
       const rid = m.ristorante_id;
       ordiniPerRistoranti[rid] = ordiniPerRistoranti[rid] || [];
+      if (!m._id || !ObjectId.isValid(m._id)) return res.status(400).json({ error: "ID piatto non valido nel payload ordine" });
+      if (!Number.isFinite(Number(m.quantita)) || Number(m.quantita) <= 0) return res.status(400).json({ error: "quantita non valida" });
+      if (!Number.isFinite(Number(m.prezzo_unitario)) || Number(m.prezzo_unitario) < 0) return res.status(400).json({ error: "prezzo_unitario non valido" });
+
       ordiniPerRistoranti[rid].push({
         _id: new ObjectId(m._id),
         nome: m.nome,
-        quantita: m.quantita,
-        prezzo_unitario: m.prezzo_unitario,
-        tempo_preparazione: m.tempo_preparazione || 10
+        quantita: Number(m.quantita),
+        prezzo_unitario: Number(m.prezzo_unitario),
+        tempo_preparazione: Number(m.tempo_preparazione) > 0 ? Number(m.tempo_preparazione) : 10
       });
     }
 
@@ -59,10 +71,26 @@ ordersRouter.post("/", authenticateUser, async (req, res) => {
       });
 
       let costo_consegna = 0;
-      if (metodo_consegna === "consegna a domicilio") {
-        const km = Number(distanza_km || 0);
-        if (Number.isNaN(km) || km < 0) return res.status(400).json({ error: "distanza_km non valida" });
-        costo_consegna = Number((km * 1.2).toFixed(2));
+      let distanzaCalcolataKm = 0;
+
+      if (isHomeDelivery) {
+        let km = Number(distanza_km);
+
+        if (!Number.isFinite(km) || km <= 0) {
+          if (!delivery_address) {
+            return res.status(400).json({ error: "Per la consegna a domicilio specifica distanza_km oppure delivery_address" });
+          }
+
+          const restaurant = await db.collection("restaurants").findOne({ _id: new ObjectId(ristoranteId) });
+          if (!restaurant) return res.status(404).json({ error: "Ristorante non trovato per il calcolo distanza" });
+
+          const restaurantLocation = restaurant.location || await geocodeAddress(restaurant.address);
+          const destinationLocation = await geocodeAddress(delivery_address);
+          km = distanceInKm(restaurantLocation, destinationLocation);
+        }
+
+        distanzaCalcolataKm = Number(km.toFixed(2));
+        costo_consegna = Number((distanzaCalcolataKm * 1.2).toFixed(2));
         totale += costo_consegna;
       }
 
@@ -75,8 +103,10 @@ ordersRouter.post("/", authenticateUser, async (req, res) => {
         costo_consegna,
         stato,
         data_ordine: formatRomeDate(),
-        metodo_consegna,
-        tempo_attesa: tempoAttesa
+        metodo_consegna: isHomeDelivery ? "Consegna a domicilio" : "Ritiro in ristorante",
+        tempo_attesa: tempoAttesa,
+        distanza_km: distanzaCalcolataKm,
+        delivery_address: isHomeDelivery ? delivery_address : null
       };
 
       const inserted = await db.collection("orders").insertOne(newOrder);
