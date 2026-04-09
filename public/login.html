@@ -4,7 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>FastFood - Login</title>
+
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"/>
+
   <style>
     body {
       background-color: #fef9e7;
@@ -19,10 +21,10 @@
       padding: 30px;
     }
     .form-label {
-      color: #00B5A2; /* codice colore azzurro logo */
+      color: #00B5A2;
     }
     .btn-primary {
-      background-color: #f4c430; /*  codice colore giallo logo */
+      background-color: #f4c430;
       border: none;
       color: black;
     }
@@ -55,28 +57,51 @@
     }
   </style>
 </head>
+
 <body>
   <div class="login-container">
-    <a href="index.html"><img src="logo.png" alt="FastFood Logo" class="logo" /></a>
+
+    <a href="index.html">
+      <img src="logo.png" alt="FastFood Logo" class="logo" />
+    </a>
+
     <h2>Login</h2>
+
     <form id="loginForm" novalidate>
+
       <div class="mb-3">
-        <label for="username" class="form-label">Username *</label>
-        <input type="text" class="form-control" id="username" required autocomplete="username" />
+        <label for="email" class="form-label">Email *</label>
+        <input type="email" class="form-control" id="email" required />
       </div>
+
       <div class="mb-3">
         <label for="password" class="form-label">Password *</label>
-        <input type="password" class="form-control" id="password" required autocomplete="current-password" />
+        <input type="password" class="form-control" id="password" required />
       </div>
-      <button type="submit" class="btn btn-primary w-100">Accedi</button>
+
+      <!-- 🔥 Bottone con spinner -->
+      <button id="loginBtn" type="submit" class="btn btn-primary w-100">
+        <span id="btnText">Accedi</span>
+        <span id="spinner" class="spinner-border spinner-border-sm d-none" role="status"></span>
+      </button>
+
     </form>
+
     <div id="loginError" class="text-danger text-center mt-3"></div>
-    <a href="register.html" class="register-link">Non hai un account? Registrati</a>
+
+    <a href="register.html" class="register-link">
+      Non hai un account? Registrati
+    </a>
+
   </div>
 
   <script>
     const loginForm = document.getElementById("loginForm");
     const loginError = document.getElementById("loginError");
+
+    const loginBtn = document.getElementById("loginBtn");
+    const btnText = document.getElementById("btnText");
+    const spinner = document.getElementById("spinner");
 
     loginForm.addEventListener("submit", async function (event) {
       event.preventDefault();
@@ -84,14 +109,19 @@
       loginError.style.display = "none";
       loginError.textContent = "";
 
-      const email = document.getElementById("username").value.trim();
+      const email = document.getElementById("email").value.trim();
       const password = document.getElementById("password").value;
 
-      if (!username || !password) {
-        loginError.textContent = "Inserisci username e password";
+      if (!email || !password) {
+        loginError.textContent = "Inserisci email e password";
         loginError.style.display = "block";
         return;
       }
+
+      // 🔄 Attiva loading
+      loginBtn.disabled = true;
+      btnText.textContent = "Accesso...";
+      spinner.classList.remove("d-none");
 
       try {
         const response = await fetch("http://localhost:3000/auth/login", {
@@ -105,27 +135,42 @@
         if (!response.ok) {
           loginError.textContent = data.error || "Errore nel login";
           loginError.style.display = "block";
+
+          resetButton();
           return;
         }
 
+        // Salvataggio dati
         localStorage.clear();
         localStorage.setItem("token", data.token);
 
-        const payload = JSON.parse(atob(data.token.split('.')[1])); //atob, decodifica stringa Base64
+        const payload = JSON.parse(atob(data.token.split('.')[1]));
+
         localStorage.setItem("role", payload.ruolo);
         localStorage.setItem("userId", payload.id);
 
-        if (payload.role === "ristoratore") {
+        // Redirect
+        if (payload.ruolo === "ristoratore") {
           window.location.href = "ristoratore/home.html";
         } else {
           window.location.href = "cliente/home.html";
         }
+
       } catch (err) {
         console.error("Errore:", err);
+
         loginError.textContent = "Errore di rete o server";
         loginError.style.display = "block";
+
+        resetButton();
       }
     });
+
+    function resetButton() {
+      loginBtn.disabled = false;
+      btnText.textContent = "Accedi";
+      spinner.classList.add("d-none");
+    }
   </script>
 </body>
 </html>
