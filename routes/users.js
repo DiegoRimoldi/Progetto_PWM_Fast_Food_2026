@@ -1,18 +1,14 @@
-import express from "express";
-import { ObjectId } from "mongodb";
-import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
-import authenticateUser from "../middlewares/authenticateUser.js";
+const express = require("express");
+const { ObjectId } = require("mongodb");
+const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
+const authenticateUser = require("../middleware/authenticateUser");
 
 const usersRouter = express.Router();
 
-//
-// 🔹 REGISTER
-//
 usersRouter.post("/register", async (req, res) => {
   try {
     const db = req.app.locals.db;
-
     const {
       username,
       email,
@@ -24,11 +20,8 @@ usersRouter.post("/register", async (req, res) => {
       role
     } = req.body;
 
-    // VALIDAZIONI BASE
     if (!username || !email || !password || !numero_di_telefono) {
-      return res.status(400).json({
-        error: "username, email, password e numero di telefono sono obbligatori"
-      });
+      return res.status(400).json({ error: "username, email, password e numero di telefono sono obbligatori" });
     }
 
     if (!role || !["cliente", "ristoratore"].includes(role)) {
@@ -36,262 +29,159 @@ usersRouter.post("/register", async (req, res) => {
     }
 
     if (role === "cliente" && (!indirizzo || !metodo_pagamento)) {
-      return res.status(400).json({
-        error: "Indirizzo e metodo di pagamento sono obbligatori"
-      });
+      return res.status(400).json({ error: "Indirizzo e metodo di pagamento sono obbligatori" });
     }
 
     if (role === "ristoratore" && !piva) {
-      return res.status(400).json({
-        error: "Partita IVA obbligatoria"
-      });
+      return res.status(400).json({ error: "Partita IVA obbligatoria" });
     }
 
-    // CONTROLLO UTENTE ESISTENTE
-    const userExists = await db.collection("users").findOne({
-      $or: [{ username }, { email }]
-    });
-
+    const userExists = await db.collection("users").findOne({ $or: [{ username }, { email }] });
     if (userExists) {
-      return res.status(409).json({
-        error: "Username o email già in uso"
-      });
+      return res.status(409).json({ error: "Username o email già in uso" });
     }
 
-    // HASH PASSWORD
     const hashedPassword = await bcrypt.hash(password, 10);
-
-    let newUser = {
+    const newUser = {
       username,
       email,
       password: hashedPassword,
       numero_di_telefono,
-      role
+      role,
+      indirizzo: role === "cliente" ? indirizzo : undefined,
+      metodo_pagamento: role === "cliente" ? metodo_pagamento : undefined,
+      piva: role === "ristoratore" ? piva : undefined,
+      createdAt: new Date()
     };
 
-    if (role === "cliente") {
-      newUser.indirizzo = indirizzo;
-      newUser.metodo_pagamento = metodo_pagamento;
-    }
-
-    if (role === "ristoratore") {
-      newUser.piva = piva;
-    }
+    Object.keys(newUser).forEach((k) => newUser[k] === undefined && delete newUser[k]);
 
     const result = await db.collection("users").insertOne(newUser);
-
-    res.status(201).json({
-      message: "Utente registrato con successo",
-      userId: result.insertedId
-    });
-
+    res.status(201).json({ message: "Utente registrato con successo", userId: result.insertedId });
   } catch (err) {
-    console.error(err);
     res.status(500).json({ error: "Errore nella registrazione" });
   }
 });
 
-//
-// 🔹 LOGIN (FIX PRINCIPALE)
-//
 usersRouter.post("/login", async (req, res) => {
   try {
     const db = req.app.locals.db;
-
     const { username, email, password } = req.body;
 
     if ((!username && !email) || !password) {
-      return res.status(400).json({
-        error: "username/email e password sono obbligatori"
-      });
+      return res.status(400).json({ error: "username/email e password sono obbligatori" });
     }
 
-    // CERCA PER USERNAME O EMAIL
-    const user = await db.collection("users").findOne({
-      $or: [
-        { username: username || null },
-        { email: email || null }
-      ]
-    });
+    const query = username ? { username } : { email };
+    const user = await db.collection("users").findOne(query);
 
-    if (!user) {
-      return res.status(401).json({ error: "Credenziali non valide" });
-    }
+    if (!user) return res.status(401).json({ error: "Credenziali non valide" });
 
-    // CONTROLLO PASSWORD
     const passwordMatch = await bcrypt.compare(password, user.password);
-    if (!passwordMatch) {
-      return res.status(401).json({ error: "Credenziali non valide" });
-    }
+    if (!passwordMatch) return res.status(401).json({ error: "Credenziali non valide" });
 
-    // TOKEN JWT
     const token = jwt.sign(
-      {
-        userId: user._id.toString(),
-        role: user.role
-      },
+      { userId: user._id.toString(), role: user.role },
       process.env.JWT_SECRET,
-      {
-        expiresIn: process.env.JWT_EXPIRES_IN || "1d"
-      }
+      { expiresIn: process.env.JWT_EXPIRES_IN || "1d" }
     );
 
-    res.json({ token });
-
+    res.json({ token, role: user.role, userId: user._id });
   } catch (err) {
-    console.error(err);
     res.status(500).json({ error: "Errore nel login" });
   }
 });
 
-//
-// 🔹 GET /ME (FIX IMPORTANTE userId)
-//
 usersRouter.get("/me", authenticateUser, async (req, res) => {
   try {
     const db = req.app.locals.db;
-
-    const userId = req.user.userId; // FIX
-
     const user = await db.collection("users").findOne(
-      { _id: new ObjectId(userId) },
+      { _id: new ObjectId(req.user._id) },
       { projection: { password: 0 } }
     );
 
-    if (!user) {
-      return res.status(404).json({ error: "Utente non trovato" });
-    }
-
+    if (!user) return res.status(404).json({ error: "Utente non trovato" });
     res.json(user);
-
   } catch (err) {
-    console.error(err);
     res.status(500).json({ error: "Errore nel recupero utente" });
   }
 });
 
-//
-// 🔹 UPDATE PROFILO
-//
 usersRouter.put("/me", authenticateUser, async (req, res) => {
   try {
     const db = req.app.locals.db;
-    const userId = req.user.userId;
+    const userId = req.user._id;
 
     if (req.body.email || req.body.username) {
-      const query = {
-        $or: [],
-        _id: { $ne: new ObjectId(userId) }
-      };
-
+      const query = { $or: [], _id: { $ne: new ObjectId(userId) } };
       if (req.body.email) query.$or.push({ email: req.body.email });
       if (req.body.username) query.$or.push({ username: req.body.username });
 
       if (query.$or.length > 0) {
         const exists = await db.collection("users").findOne(query);
-        if (exists) {
-          return res.status(409).json({
-            error: "Username o email già in uso"
-          });
-        }
+        if (exists) return res.status(409).json({ error: "Username o email già in uso" });
       }
     }
+
+    const fields = { ...req.body };
+    delete fields.password;
+    delete fields.role;
 
     const result = await db.collection("users").findOneAndUpdate(
       { _id: new ObjectId(userId) },
-      { $set: req.body },
-      {
-        returnDocument: "after",
-        projection: { password: 0 }
-      }
+      { $set: fields },
+      { returnDocument: "after", projection: { password: 0 } }
     );
 
-    if (!result.value) {
-      return res.status(404).json({ error: "Utente non trovato" });
-    }
-
-    res.json(result.value);
-
+    if (!result) return res.status(404).json({ error: "Utente non trovato" });
+    res.json(result);
   } catch (err) {
-    console.error(err);
     res.status(500).json({ error: "Errore aggiornamento utente" });
   }
 });
 
-//
-// 🔹 CAMBIO PASSWORD
-//
 usersRouter.put("/me/password", authenticateUser, async (req, res) => {
   try {
     const db = req.app.locals.db;
-    const userId = req.user.userId;
-
     const { oldPassword, newPassword } = req.body;
 
     if (!oldPassword || !newPassword) {
-      return res.status(400).json({
-        error: "Parametri mancanti"
-      });
+      return res.status(400).json({ error: "Parametri mancanti" });
     }
 
-    const user = await db.collection("users").findOne({
-      _id: new ObjectId(userId)
-    });
-
-    if (!user) {
-      return res.status(404).json({ error: "Utente non trovato" });
-    }
+    const user = await db.collection("users").findOne({ _id: new ObjectId(req.user._id) });
+    if (!user) return res.status(404).json({ error: "Utente non trovato" });
 
     const match = await bcrypt.compare(oldPassword, user.password);
-    if (!match) {
-      return res.status(400).json({
-        error: "Vecchia password errata"
-      });
-    }
+    if (!match) return res.status(400).json({ error: "Vecchia password errata" });
 
     const hashedNewPassword = await bcrypt.hash(newPassword, 10);
-
     await db.collection("users").updateOne(
-      { _id: new ObjectId(userId) },
+      { _id: new ObjectId(req.user._id) },
       { $set: { password: hashedNewPassword } }
     );
 
     res.json({ message: "Password aggiornata" });
-
   } catch (err) {
-    console.error(err);
     res.status(500).json({ error: "Errore aggiornamento password" });
   }
 });
 
-//
-// 🔹 DELETE UTENTE
-//
 usersRouter.delete("/:id", authenticateUser, async (req, res) => {
   try {
     const db = req.app.locals.db;
     const userId = req.params.id;
 
-    if (!ObjectId.isValid(userId)) {
-      return res.status(400).json({ error: "ID non valido" });
-    }
+    if (!ObjectId.isValid(userId)) return res.status(400).json({ error: "ID non valido" });
+    if (req.user._id !== userId) return res.status(403).json({ error: "Non autorizzato" });
 
-    if (req.user.userId !== userId) {
-      return res.status(403).json({
-        error: "Non autorizzato"
-      });
-    }
-
-    await db.collection("users").deleteOne({
-      _id: new ObjectId(userId)
-    });
+    await db.collection("users").deleteOne({ _id: new ObjectId(userId) });
+    await db.collection("carts").deleteOne({ user_id: new ObjectId(userId) });
 
     res.json({ message: "Utente eliminato" });
-
   } catch (err) {
-    console.error(err);
     res.status(500).json({ error: "Errore eliminazione" });
   }
 });
 
-export default usersRouter;
+module.exports = usersRouter;

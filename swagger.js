@@ -1,6 +1,8 @@
 const swaggerAutogen = require('swagger-autogen')();
+const swaggerUi = require("swagger-ui-express");
+const swaggerDocument = require("./swagger.json");
 
-module.exports = () => {
+function setupSwagger(app) {
 
   const doc = {
     info: {
@@ -14,5 +16,11 @@ module.exports = () => {
   const outputFile = './swagger.json';
   const inputFiles = ['./app.js'];
 
-  return swaggerAutogen(outputFile, inputFiles, doc);
-};
+  // Genera swagger.json
+  swaggerAutogen(outputFile, inputFiles, doc);
+
+  // Usa Swagger UI
+  app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+}
+
+module.exports = setupSwagger;
