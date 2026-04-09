@@ -15,12 +15,19 @@ mealsRouter.get("/", async (req, res) => {
     if (strArea) filter.strArea = strArea;
     if (nome) filter.strMeal = { $regex: nome, $options: "i" };
 
+    const ingredientFilters = [];
     if (ingrediente) {
-      filter.ingredients = { $elemMatch: { $regex: ingrediente, $options: "i" } };
+      ingredientFilters.push({ ingredients: { $elemMatch: { $regex: ingrediente, $options: "i" } } });
     }
 
     if (allergene) {
-      filter.ingredients = { $not: { $elemMatch: { $regex: allergene, $options: "i" } } };
+      ingredientFilters.push({ ingredients: { $not: { $elemMatch: { $regex: allergene, $options: "i" } } } });
+    }
+
+    if (ingredientFilters.length === 1) {
+      Object.assign(filter, ingredientFilters[0]);
+    } else if (ingredientFilters.length > 1) {
+      filter.$and = ingredientFilters;
     }
 
     if (prezzoMin || prezzoMax) {
