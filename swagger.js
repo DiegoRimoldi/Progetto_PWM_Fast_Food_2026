@@ -1,9 +1,6 @@
 const swaggerAutogen = require('swagger-autogen')();
-const swaggerUi = require("swagger-ui-express");
-const swaggerDocument = require("./swagger.json");
 
-function setupSwagger(app) {
-
+function generateSwagger() {
   const doc = {
     info: {
       title: 'Progetto PWM Fast-Food - Rimoldi Diego',
@@ -16,11 +13,7 @@ function setupSwagger(app) {
   const outputFile = './swagger.json';
   const inputFiles = ['./app.js'];
 
-  // Genera swagger.json
-  swaggerAutogen(outputFile, inputFiles, doc);
-
-  // Usa Swagger UI
-  app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+  return swaggerAutogen(outputFile, inputFiles, doc);
 }
 
-module.exports = setupSwagger;
+module.exports = generateSwagger;
