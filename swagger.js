@@ -1,32 +1,14 @@
-const swaggerUi = require("swagger-ui-express");
-const fs = require("fs");
-const path = require("path");
+import swaggerAutogen from 'swagger-autogen';
 
-// Carica swagger.json
-const swaggerDocument = JSON.parse(
-  fs.readFileSync(path.join(__dirname, "swagger.json"), "utf8")
-);
+const doc = {
+    info: {
+      title: 'Progetto PWM Fast-Food - Rimoldi Diego',
+      description: 'Descrizione degli endpoint API REST per il progetto "Fast-Food" di Programmazione Web & Mobile, sviluppato nell’Anno Accademico 2025/2026 da Rimoldi Diego'
+    },
+    host: 'localhost:3000'
+  };
 
-// Configurazione JWT
-const options = {
-  swaggerOptions: {
-    authAction: {
-      JWT: {
-        name: "JWT",
-        schema: {
-          type: "apiKey",
-          in: "header",
-          name: "Authorization",
-          description: "Inserisci 'Bearer <token>'"
-        },
-        value: "Bearer "
-      }
-    }
-  }
-};
+const outputFile = './swagger.json';
+const inputFiles = ['./index.js'];
 
-const setupSwagger = (app) => {
-  app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerDocument, options));
-};
-
-module.exports = setupSwagger;
+swaggerAutogen(outputFile,inputFiles, doc);
